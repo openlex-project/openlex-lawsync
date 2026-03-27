@@ -29,6 +29,7 @@ export interface SupplementResult {
 
 export interface SupplementConfig {
   label: Record<string, string>;
+  title_short: string;
   source: string;
   prefix: string;
   mapping: Record<string, number[]>;

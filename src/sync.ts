@@ -146,7 +146,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
                 title: "",
                 children: suppResult.items.map((item) => ({
                   nr: `${supplementCfg.prefix}-${item.nr}`,
-                  title: `${supplementCfg.label[law.lang] ?? type} ${item.nr}`,
+                  title: `${supplementCfg.title_short} ${item.nr}`,
                 })),
               });
             }
