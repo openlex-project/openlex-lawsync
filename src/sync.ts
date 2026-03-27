@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { stringify, parse } from "yaml";
 import type { SyncYaml, LawConfig } from "./types.js";
 import { getProvider } from "./providers/index.js";
-import { normalizeI18n } from "./i18n-utils.js";
+import { normalizeI18n, resolveI18n } from "./i18n-utils.js";
 import { log } from "./log.js";
 
 export interface SyncOptions {
@@ -71,7 +71,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
     const law: LawConfig = { ...lawCfg, slug, title: normalizeI18n(lawCfg.title, lang), title_short: normalizeI18n(lawCfg.title_short, lang) };
 
     try {
-      log.info("Syncing %s (%s)...", slug, law.title_short ?? slug);
+      log.info("Syncing %s (%s)...", slug, resolveI18n(law.title_short, lang) || slug);
       const provider = getProvider(law.source);
       let lawChanged = 0;
 

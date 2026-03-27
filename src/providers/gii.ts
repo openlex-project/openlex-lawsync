@@ -4,12 +4,14 @@
  */
 import { Buffer } from "node:buffer";
 import type { LawSyncProvider, LawConfig, SyncResult, TocNode, Provision } from "../types.js";
+import { log } from "../log.js";
 
 const GII_URL = "https://www.gesetze-im-internet.de/{slug}/xml.zip";
 
+/** Fetch and decompress the XML zip archive from GII. */
 async function fetchXml(slug: string): Promise<string> {
   const url = GII_URL.replace("{slug}", slug);
-  console.log(`  Fetching ${url}`);
+  log.info(`  Fetching ${url}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`GII fetch failed: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
@@ -42,12 +44,14 @@ async function fetchXml(slug: string): Promise<string> {
   throw new Error("No file found in ZIP");
 }
 
+/** Extract text content of an XML tag (first match). */
 function xmlText(xml: string, tag: string): string {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i");
   const m = xml.match(re);
   return m ? m[1]!.trim() : "";
 }
 
+/** Convert GII XML content elements to Markdown (bold, italic, lists, cleanup). */
 function contentToMarkdown(content: string): string {
   return content
     .replace(/<P[^>]*>/gi, "\n\n").replace(/<\/P>/gi, "")
@@ -70,6 +74,7 @@ function contentToMarkdown(content: string): string {
     .trim();
 }
 
+/** Extract provision number from enbez string (e.g., "§ 1" → "1", "Art 5" → "5"). */
 function extractNr(enbez: string, unitType: string): string | null {
   if (enbez.includes("(XXXX)")) return null;
   const re = unitType === "section" ? /§\s*(\d+\w*)/ : /Art\.?\s*(\d+\w*)/;

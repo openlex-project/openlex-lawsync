@@ -4,21 +4,25 @@
  * and extracts numbered recitals from the preamble for supplements.
  */
 import type { LawSyncProvider, LawConfig, SyncResult, SupplementConfig, SupplementResult, TocNode, Provision, SupplementItem } from "../types.js";
+import { log } from "../log.js";
 
 const EURLEX_URL = "https://eur-lex.europa.eu/legal-content/{lang}/TXT/HTML/?uri=CELEX:{celex}";
 
+/** Fetch the consolidated HTML version of an EU regulation from EUR-Lex. */
 async function fetchHtml(celex: string, lang: string): Promise<string> {
   const url = EURLEX_URL.replace("{celex}", celex).replace("{lang}", lang.toUpperCase());
-  console.log(`  Fetching ${url}`);
+  log.info(`  Fetching ${url}`);
   const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" } });
   if (!res.ok) throw new Error(`EUR-Lex fetch failed: ${res.status}`);
   return res.text();
 }
 
+/** Strip all HTML tags, returning plain text. */
 function stripTags(html: string): string {
   return html.replace(/<[^>]+>/g, "").trim();
 }
 
+/** Convert an EUR-Lex article div to Markdown (paragraphs + table-based lists). */
 function divToMarkdown(html: string): string {
   const parts: string[] = [];
   // Paragraphs
