@@ -1,3 +1,7 @@
+/**
+ * GII Provider — syncs German federal laws from gesetze-im-internet.de.
+ * Fetches XML zip archives, parses norm elements, converts to Markdown.
+ */
 import { Buffer } from "node:buffer";
 import type { LawSyncProvider, LawConfig, SyncResult, TocNode, Provision } from "../types.js";
 

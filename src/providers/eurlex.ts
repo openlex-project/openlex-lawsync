@@ -1,3 +1,8 @@
+/**
+ * EUR-Lex Provider — syncs EU regulations from eur-lex.europa.eu.
+ * Fetches consolidated HTML, parses eli-subdivision divs for articles,
+ * and extracts numbered recitals from the preamble for supplements.
+ */
 import type { LawSyncProvider, LawConfig, SyncResult, SupplementConfig, SupplementResult, TocNode, Provision, SupplementItem } from "../types.js";
 
 const EURLEX_URL = "https://eur-lex.europa.eu/legal-content/{lang}/TXT/HTML/?uri=CELEX:{celex}";

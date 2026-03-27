@@ -1,3 +1,4 @@
+/** Table of contents node — either a structure heading or a provision reference. */
 export interface TocNode {
   label?: string;
   title: string;
@@ -5,6 +6,7 @@ export interface TocNode {
   children?: TocNode[];
 }
 
+/** A single law provision (paragraph/article) with its text as Markdown. */
 export interface Provision {
   nr: string;
   title: string;
@@ -53,6 +55,10 @@ export interface SyncYaml {
   laws: Record<string, Omit<LawConfig, "slug">>;
 }
 
+/**
+ * Provider interface for law sync sources.
+ * Implement this to add a new source (e.g., RIS, Landesrecht).
+ */
 export interface LawSyncProvider {
   id: string;
   fetchLaw(config: LawConfig): Promise<SyncResult>;
