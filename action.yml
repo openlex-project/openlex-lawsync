@@ -1,0 +1,38 @@
+name: "OpenLex Law Sync"
+description: "Sync legal texts from GII, EUR-Lex, and other sources into Markdown"
+branding:
+  icon: "book-open"
+  color: "purple"
+
+inputs:
+  deploy-hook:
+    description: "Vercel Deploy Hook URL (optional)"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - run: npx openlex-lawsync
+      shell: bash
+    - name: Commit & push
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        if git diff --quiet; then
+          echo "No changes"
+          exit 0
+        fi
+        DATE=$(date -u +%Y-%m-%d)
+        git add -A
+        git commit -m "sync: $DATE"
+        git tag "sync-$DATE" || true
+        git push
+        git push --tags
+    - name: Trigger deploy
+      if: inputs.deploy-hook != ''
+      shell: bash
+      run: curl -s -X POST "${{ inputs.deploy-hook }}"
