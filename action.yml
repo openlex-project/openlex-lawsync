@@ -15,13 +15,16 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: "22"
-    - name: Run sync
+    - name: Build & run sync
       id: sync
       shell: bash
       run: |
-        OUTPUT=$(npx openlex-lawsync 2>&1)
+        SYNC_DIR=$(mktemp -d)
+        git clone --depth 1 https://github.com/openlex-project/openlex-lawsync.git "$SYNC_DIR"
+        cd "$SYNC_DIR" && npm ci && npm run build
+        cd "$GITHUB_WORKSPACE"
+        OUTPUT=$(node "$SYNC_DIR/dist/cli.js" 2>&1)
         echo "$OUTPUT"
-        # Extract changed law slugs from output (lines like "  N provisions, M changed" preceded by "Syncing slug")
         CHANGED=$(echo "$OUTPUT" | grep -B20 "provisions, [1-9]" | grep "Syncing " | sed 's/.*Syncing \([^ ]*\).*/\1/' | tr '\n' ' ')
         echo "changed_laws=$CHANGED" >> "$GITHUB_OUTPUT"
     - name: Commit & tag
@@ -36,7 +39,6 @@ runs:
         DATE=$(date -u +%Y-%m-%d)
         git add -A
         git commit -m "sync: $DATE"
-        # Per-law tags for changed laws
         for SLUG in ${{ steps.sync.outputs.changed_laws }}; do
           TAG="law/${SLUG}/${DATE}"
           git tag "$TAG" || true
