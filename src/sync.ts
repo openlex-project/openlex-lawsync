@@ -23,6 +23,8 @@ export interface SyncReport {
   changed: number;
   total: number;
   errors: string[];
+  /** Law slugs that had file changes (for per-law tagging). */
+  changedLaws: string[];
 }
 
 /** Maximum retries per provider fetch on transient errors. */
@@ -60,7 +62,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
   const cwd = opts.cwd ?? process.cwd();
   const raw = readFileSync(join(cwd, "sync.yaml"), "utf-8");
   const config = parse(raw) as SyncYaml;
-  const report: SyncReport = { changed: 0, total: 0, errors: [] };
+  const report: SyncReport = { changed: 0, total: 0, errors: [], changedLaws: [] };
 
   for (const [slug, lawCfg] of Object.entries(config.laws)) {
     if (opts.law && opts.law !== slug) continue;
@@ -69,6 +71,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
     try {
       log.info("Syncing %s (%s)...", slug, law.title_short ?? slug);
       const provider = getProvider(law.source);
+      let lawChanged = 0;
 
       // Fetch law provisions with retry
       const result = await withRetry(`${slug}/fetchLaw`, () => provider.fetchLaw(law));
@@ -85,7 +88,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
         written.add(fname);
         const text = p.text.endsWith("\n") ? p.text : p.text + "\n";
         report.total++;
-        if (writeIfChanged(join(dir, fname), text, opts.dryRun)) report.changed++;
+        if (writeIfChanged(join(dir, fname), text, opts.dryRun)) { report.changed++; lawChanged++; }
       }
 
       // Remove files for repealed/deleted provisions
@@ -93,6 +96,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
         if (!written.has(old)) {
           if (opts.dryRun) log.info("[dry-run] Would remove %s/%s", slug, old);
           else { unlinkSync(join(dir, old)); log.info("Removed %s/%s", slug, old); }
+          lawChanged++;
         }
       }
 
@@ -112,7 +116,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
 
             for (const item of suppResult.items) {
               const text = item.text.endsWith("\n") ? item.text : item.text + "\n";
-              if (writeIfChanged(join(suppDir, `${item.nr}.md`), text, opts.dryRun)) report.changed++;
+              if (writeIfChanged(join(suppDir, `${item.nr}.md`), text, opts.dryRun)) { report.changed++; lawChanged++; }
             }
             log.info("  %s %s synced", suppResult.items.length, type);
           } catch (err) {
@@ -123,7 +127,8 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
         }
       }
 
-      log.info("  %s provisions, %s changed", result.provisions.length, report.changed);
+      if (lawChanged > 0) report.changedLaws.push(slug);
+      log.info("  %s provisions, %s changed", result.provisions.length, lawChanged);
     } catch (err) {
       const msg = `${slug}: ${err instanceof Error ? err.message : err}`;
       log.error("Law sync failed: %s", msg);

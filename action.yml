@@ -15,24 +15,40 @@ runs:
     - uses: actions/setup-node@v4
       with:
         node-version: "22"
-    - run: npx openlex-lawsync
+    - name: Run sync
+      id: sync
       shell: bash
-    - name: Commit & push
+      run: |
+        OUTPUT=$(npx openlex-lawsync 2>&1)
+        echo "$OUTPUT"
+        # Extract changed law slugs from output (lines like "  N provisions, M changed" preceded by "Syncing slug")
+        CHANGED=$(echo "$OUTPUT" | grep -B20 "provisions, [1-9]" | grep "Syncing " | sed 's/.*Syncing \([^ ]*\).*/\1/' | tr '\n' ' ')
+        echo "changed_laws=$CHANGED" >> "$GITHUB_OUTPUT"
+    - name: Commit & tag
       shell: bash
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        if git diff --quiet; then
+        if git diff --quiet && git diff --cached --quiet; then
           echo "No changes"
           exit 0
         fi
         DATE=$(date -u +%Y-%m-%d)
         git add -A
         git commit -m "sync: $DATE"
-        git tag "sync-$DATE" || true
+        # Per-law tags for changed laws
+        for SLUG in ${{ steps.sync.outputs.changed_laws }}; do
+          TAG="law/${SLUG}/${DATE}"
+          git tag "$TAG" || true
+          echo "Tagged: $TAG"
+        done
         git push
         git push --tags
     - name: Trigger deploy
       if: inputs.deploy-hook != ''
       shell: bash
-      run: curl -s -X POST "${{ inputs.deploy-hook }}"
+      run: |
+        if ! git diff --quiet HEAD~1 HEAD 2>/dev/null; then
+          curl -s -X POST "${{ inputs.deploy-hook }}"
+          echo "Deploy hook triggered"
+        fi
