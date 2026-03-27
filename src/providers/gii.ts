@@ -15,33 +15,44 @@ async function fetchXml(slug: string): Promise<string> {
   const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" }, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`GII fetch failed: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
-  // ZIP: find first file, decompress (ZIP is simple enough for single-file archives)
-  const { Readable } = await import("node:stream");
-  const { createUnzip } = await import("node:zlib");
-  const { pipeline } = await import("node:stream/promises");
+  const { inflateRawSync } = await import("node:zlib");
 
-  // Minimal ZIP parsing: find local file header, extract compressed data
-  let offset = 0;
-  while (offset < buf.length - 4) {
-    if (buf.readUInt32LE(offset) === 0x04034b50) { // local file header
-      const compMethod = buf.readUInt16LE(offset + 8);
-      const fnLen = buf.readUInt16LE(offset + 26);
-      const extraLen = buf.readUInt16LE(offset + 28);
-      const dataStart = offset + 30 + fnLen + extraLen;
-      const compSize = buf.readUInt32LE(offset + 18);
-      const raw = buf.subarray(dataStart, dataStart + compSize);
-      if (compMethod === 0) return raw.toString("utf-8"); // stored
-      if (compMethod === 8) { // deflated
-        const chunks: Buffer[] = [];
-        const inflate = createUnzip();
-        inflate.on("data", (c: Buffer) => chunks.push(c));
-        await pipeline(Readable.from(raw), inflate);
-        return Buffer.concat(chunks).toString("utf-8");
-      }
+  // Parse central directory (local headers may have 0 sizes due to data descriptors)
+  let cdEnd = buf.length - 22;
+  while (cdEnd > 0 && buf.readUInt32LE(cdEnd) !== 0x06054b50) cdEnd--;
+  if (cdEnd <= 0) throw new Error("No central directory in ZIP");
+  const cdOffset = buf.readUInt32LE(cdEnd + 16);
+  const cdCount = buf.readUInt16LE(cdEnd + 10);
+
+  // Find largest XML entry
+  let best: { compMethod: number; compSize: number; localOffset: number } | null = null;
+  let bestSize = 0;
+  let pos = cdOffset;
+  for (let i = 0; i < cdCount; i++) {
+    if (buf.readUInt32LE(pos) !== 0x02014b50) break;
+    const compMethod = buf.readUInt16LE(pos + 10);
+    const compSize = buf.readUInt32LE(pos + 20);
+    const uncompSize = buf.readUInt32LE(pos + 24);
+    const fnLen = buf.readUInt16LE(pos + 28);
+    const extraLen = buf.readUInt16LE(pos + 30);
+    const commentLen = buf.readUInt16LE(pos + 32);
+    const localOffset = buf.readUInt32LE(pos + 42);
+    const name = buf.subarray(pos + 46, pos + 46 + fnLen).toString("utf-8");
+    if (name.endsWith(".xml") && uncompSize > bestSize) {
+      best = { compMethod, compSize, localOffset };
+      bestSize = uncompSize;
     }
-    offset++;
+    pos += 46 + fnLen + extraLen + commentLen;
   }
-  throw new Error("No file found in ZIP");
+  if (!best) throw new Error("No XML file found in ZIP");
+
+  const lfhFnLen = buf.readUInt16LE(best.localOffset + 26);
+  const lfhExtraLen = buf.readUInt16LE(best.localOffset + 28);
+  const dataStart = best.localOffset + 30 + lfhFnLen + lfhExtraLen;
+  const raw = buf.subarray(dataStart, dataStart + best.compSize);
+  if (best.compMethod === 0) return raw.toString("utf-8");
+  if (best.compMethod === 8) return inflateRawSync(raw).toString("utf-8");
+  throw new Error(`Unsupported ZIP compression: ${best.compMethod}`);
 }
 
 /** Extract text content of an XML tag (first match). */
