@@ -77,6 +77,10 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
 
       // Fetch law provisions with retry
       const result = await withRetry(`${slug}/fetchLaw`, () => provider.fetchLaw(law));
+      if (result.provisions.length === 0) {
+        log.warn("  Provider returned 0 provisions — skipping (keeping existing files)");
+        continue;
+      }
       const dir = join(cwd, slug);
       mkdirSync(dir, { recursive: true });
 
