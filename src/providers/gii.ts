@@ -2,7 +2,7 @@
  * GII Provider — syncs German federal laws from gesetze-im-internet.de.
  * Fetches XML zip archives, parses norm elements, converts to Markdown.
  */
-import { Buffer } from "node:buffer";
+import { unzipLargestXml } from "../zip.js";
 import type { LawSyncProvider, LawConfig, SyncResult, TocNode, Provision } from "../types.js";
 import { log } from "../log.js";
 
@@ -14,45 +14,8 @@ async function fetchXml(slug: string): Promise<string> {
   log.info(`  Fetching ${url}`);
   const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" }, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`GII fetch failed: ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  const { inflateRawSync } = await import("node:zlib");
-
-  // Parse central directory (local headers may have 0 sizes due to data descriptors)
-  let cdEnd = buf.length - 22;
-  while (cdEnd > 0 && buf.readUInt32LE(cdEnd) !== 0x06054b50) cdEnd--;
-  if (cdEnd <= 0) throw new Error("No central directory in ZIP");
-  const cdOffset = buf.readUInt32LE(cdEnd + 16);
-  const cdCount = buf.readUInt16LE(cdEnd + 10);
-
-  // Find largest XML entry
-  let best: { compMethod: number; compSize: number; localOffset: number } | null = null;
-  let bestSize = 0;
-  let pos = cdOffset;
-  for (let i = 0; i < cdCount; i++) {
-    if (buf.readUInt32LE(pos) !== 0x02014b50) break;
-    const compMethod = buf.readUInt16LE(pos + 10);
-    const compSize = buf.readUInt32LE(pos + 20);
-    const uncompSize = buf.readUInt32LE(pos + 24);
-    const fnLen = buf.readUInt16LE(pos + 28);
-    const extraLen = buf.readUInt16LE(pos + 30);
-    const commentLen = buf.readUInt16LE(pos + 32);
-    const localOffset = buf.readUInt32LE(pos + 42);
-    const name = buf.subarray(pos + 46, pos + 46 + fnLen).toString("utf-8");
-    if (name.endsWith(".xml") && uncompSize > bestSize) {
-      best = { compMethod, compSize, localOffset };
-      bestSize = uncompSize;
-    }
-    pos += 46 + fnLen + extraLen + commentLen;
-  }
-  if (!best) throw new Error("No XML file found in ZIP");
-
-  const lfhFnLen = buf.readUInt16LE(best.localOffset + 26);
-  const lfhExtraLen = buf.readUInt16LE(best.localOffset + 28);
-  const dataStart = best.localOffset + 30 + lfhFnLen + lfhExtraLen;
-  const raw = buf.subarray(dataStart, dataStart + best.compSize);
-  if (best.compMethod === 0) return raw.toString("utf-8");
-  if (best.compMethod === 8) return inflateRawSync(raw).toString("utf-8");
-  throw new Error(`Unsupported ZIP compression: ${best.compMethod}`);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  return unzipLargestXml(buf);
 }
 
 /** Extract text content of an XML tag (first match). */

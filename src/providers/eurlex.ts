@@ -49,49 +49,7 @@ async function sparql(query: string): Promise<Record<string, string>[]> {
   return data.results.bindings.map((b) => Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v.value])));
 }
 
-/** Extract the largest XML file from a ZIP buffer using the central directory. */
-async function extractLargestXmlFromZip(buf: Buffer): Promise<string> {
-  const { inflateRawSync } = await import("node:zlib");
-
-  // Find central directory (scan from end for 0x06054b50)
-  let cdEnd = buf.length - 22;
-  while (cdEnd > 0 && buf.readUInt32LE(cdEnd) !== 0x06054b50) cdEnd--;
-  const cdOffset = buf.readUInt32LE(cdEnd + 16);
-  const cdCount = buf.readUInt16LE(cdEnd + 10);
-
-  // Parse central directory entries
-  const entries: { name: string; compMethod: number; compSize: number; uncompSize: number; localOffset: number }[] = [];
-  let pos = cdOffset;
-  for (let i = 0; i < cdCount; i++) {
-    if (buf.readUInt32LE(pos) !== 0x02014b50) break;
-    const compMethod = buf.readUInt16LE(pos + 10);
-    const compSize = buf.readUInt32LE(pos + 20);
-    const uncompSize = buf.readUInt32LE(pos + 24);
-    const fnLen = buf.readUInt16LE(pos + 28);
-    const extraLen = buf.readUInt16LE(pos + 30);
-    const commentLen = buf.readUInt16LE(pos + 32);
-    const localOffset = buf.readUInt32LE(pos + 42);
-    const name = buf.subarray(pos + 46, pos + 46 + fnLen).toString("utf-8");
-    entries.push({ name, compMethod, compSize, uncompSize, localOffset });
-    pos += 46 + fnLen + extraLen + commentLen;
-  }
-
-  // Pick largest XML file
-  const xmlEntries = entries.filter((e) => e.name.endsWith(".xml") && e.uncompSize > 0).sort((a, b) => b.uncompSize - a.uncompSize);
-  if (!xmlEntries.length) throw new Error("No XML file found in ZIP");
-  const entry = xmlEntries[0]!;
-  log.info("  Extracting %s (%d bytes) from ZIP", entry.name, entry.uncompSize);
-
-  // Read data from local file header
-  const lfhFnLen = buf.readUInt16LE(entry.localOffset + 26);
-  const lfhExtraLen = buf.readUInt16LE(entry.localOffset + 28);
-  const dataStart = entry.localOffset + 30 + lfhFnLen + lfhExtraLen;
-  const raw = buf.subarray(dataStart, dataStart + entry.compSize);
-
-  if (entry.compMethod === 0) return raw.toString("utf-8");
-  if (entry.compMethod === 8) return inflateRawSync(raw).toString("utf-8");
-  throw new Error(`Unsupported ZIP compression: ${entry.compMethod}`);
-}
+import { unzipLargestXml } from "../zip.js";
 
 /** Fetch the Formex XML document. Handles both direct XML (DOC_2) and ZIP archives (DOC_1). */
 async function fetchFormex(manifestationUrl: string): Promise<string> {
@@ -109,7 +67,7 @@ async function fetchFormex(manifestationUrl: string): Promise<string> {
       const zipRes = await fetch(url, { headers: { "Accept": "application/zip" } });
       if (!zipRes.ok) continue;
       const buf = Buffer.from(await zipRes.arrayBuffer());
-      return extractLargestXmlFromZip(buf);
+      return unzipLargestXml(new Uint8Array(buf));
     }
   }
   throw new Error(`Cellar fetch failed for ${manifestationUrl}`);
