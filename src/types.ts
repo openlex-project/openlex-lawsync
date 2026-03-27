@@ -1,3 +1,5 @@
+import type { I18nString } from "./i18n-utils.js";
+
 /** Table of contents node — either a structure heading or a provision reference. */
 export interface TocNode {
   label?: string;
@@ -28,8 +30,8 @@ export interface SupplementResult {
 }
 
 export interface SupplementConfig {
-  label: Record<string, string>;
-  title_short: Record<string, string>;
+  label: I18nString;
+  title_short: I18nString;
   source: string;
   prefix: string;
   mapping: Record<string, number[]>;
@@ -37,8 +39,8 @@ export interface SupplementConfig {
 
 export interface LawConfig {
   slug: string;
-  title: Record<string, string>;
-  title_short?: Record<string, string>;
+  title: I18nString;
+  title_short?: I18nString;
   unit_type: "article" | "section";
   lang: string;
   license?: string;
