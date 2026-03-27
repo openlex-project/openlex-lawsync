@@ -100,11 +100,6 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
         }
       }
 
-      // Write toc.yaml
-      if (!opts.dryRun) {
-        writeFileSync(join(dir, "toc.yaml"), stringify(result.toc, { lineWidth: 0 }), "utf-8");
-      }
-
       // Sync translations
       if (law.translations?.length) {
         for (const lang of law.translations) {
@@ -130,19 +125,32 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
         }
       }
 
-      // Sync supplements (e.g., recitals)
+      // Sync supplements (e.g., recitals) — written flat with prefix (rec-1.md, rec-2.md)
       if (law.supplements && provider.fetchSupplement) {
         for (const [type, supplementCfg] of Object.entries(law.supplements)) {
           try {
-            log.info("  Syncing supplement: %s", type);
+            log.info("  Syncing supplement: %s (prefix: %s)", type, supplementCfg.prefix);
             const suppResult = await withRetry(`${slug}/${type}`, () => provider.fetchSupplement!(law, type, supplementCfg));
-            const suppDir = join(dir, type);
-            mkdirSync(suppDir, { recursive: true });
 
+            // Write flat alongside provisions: {slug}/rec-1.md, rec-2.md, ...
             for (const item of suppResult.items) {
+              const fname = `${supplementCfg.prefix}-${item.nr}.md`;
               const text = item.text.endsWith("\n") ? item.text : item.text + "\n";
-              if (writeIfChanged(join(suppDir, `${item.nr}.md`), text, opts.dryRun)) { report.changed++; lawChanged++; }
+              if (writeIfChanged(join(dir, fname), text, opts.dryRun)) { report.changed++; lawChanged++; }
             }
+
+            // Add supplement section to TOC
+            if (suppResult.items.length > 0) {
+              result.toc.push({
+                label: supplementCfg.label[law.lang] ?? supplementCfg.label["en"] ?? type,
+                title: "",
+                children: suppResult.items.map((item) => ({
+                  nr: `${supplementCfg.prefix}-${item.nr}`,
+                  title: `${supplementCfg.label[law.lang] ?? type} ${item.nr}`,
+                })),
+              });
+            }
+
             log.info("  %s %s synced", suppResult.items.length, type);
           } catch (err) {
             const msg = `${slug}/${type}: ${err instanceof Error ? err.message : err}`;
@@ -150,6 +158,11 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
             report.errors.push(msg);
           }
         }
+      }
+
+      // Write toc.yaml AFTER supplements (so supplement sections are included)
+      if (!opts.dryRun) {
+        writeFileSync(join(dir, "toc.yaml"), stringify(result.toc, { lineWidth: 0 }), "utf-8");
       }
 
       if (lawChanged > 0) report.changedLaws.push(slug);

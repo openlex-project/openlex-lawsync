@@ -58,6 +58,7 @@ laws:
       recitals:
         label: { de: "Erwägungsgründe", en: "Recitals" }
         source: eurlex
+        prefix: "rec"
         mapping:
           5: [39]
           7: [32, 33, 42, 43]
