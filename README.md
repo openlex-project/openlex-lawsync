@@ -57,7 +57,7 @@ laws:
     supplements:
       recitals:
         label: { de: "Erwägungsgründe", en: "Recitals" }
-        title_short: "EG"
+        title_short: { de: "EG", en: "Rec." }
         source: eurlex
         prefix: "rec"
         mapping:
