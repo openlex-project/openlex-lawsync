@@ -2,7 +2,7 @@
  * GII Provider — syncs German federal laws from gesetze-im-internet.de.
  * Fetches XML zip archives, parses norm elements, converts to Markdown.
  */
-import { unzipLargestXml } from "../zip.js";
+import { unzipXml } from "../zip.js";
 import type { LawSyncProvider, LawConfig, SyncResult, TocNode, Provision } from "../types.js";
 import { log } from "../log.js";
 
@@ -15,7 +15,7 @@ async function fetchXml(slug: string): Promise<string> {
   const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" }, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`GII fetch failed: ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());
-  return unzipLargestXml(buf);
+  return unzipXml(buf);
 }
 
 /** Extract text content of an XML tag (first match). */

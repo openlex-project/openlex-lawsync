@@ -49,7 +49,7 @@ async function sparql(query: string): Promise<Record<string, string>[]> {
   return data.results.bindings.map((b) => Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v.value])));
 }
 
-import { unzipLargestXml } from "../zip.js";
+import { unzipXml } from "../zip.js";
 
 /** Fetch the Formex XML document. Handles both direct XML (DOC_2) and ZIP archives (DOC_1). */
 async function fetchFormex(manifestationUrl: string): Promise<string> {
@@ -67,7 +67,11 @@ async function fetchFormex(manifestationUrl: string): Promise<string> {
       const zipRes = await fetch(url, { headers: { "Accept": "application/zip" } });
       if (!zipRes.ok) continue;
       const buf = Buffer.from(await zipRes.arrayBuffer());
-      return unzipLargestXml(new Uint8Array(buf));
+      return unzipXml(new Uint8Array(buf), (_name, data) => {
+        // Formex: the regulation body is always an <ACT> document
+        const head = new TextDecoder().decode(data.slice(0, 500));
+        return /<ACT[\s>]/.test(head);
+      });
     }
   }
   throw new Error(`Cellar fetch failed for ${manifestationUrl}`);
