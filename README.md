@@ -50,7 +50,7 @@ laws:
     title_short: "DSGVO"
     unit_type: "article"
     lang: "de"
-    license: "Gemeinfrei"
+    license: "LicenseRef-PublicDomain"
     source: "eurlex"
     celex: "32016R0679"
     feedback: true
@@ -67,7 +67,7 @@ laws:
     title_short: "BGB"
     unit_type: "section"
     lang: "de"
-    license: "Gemeinfrei"
+    license: "LicenseRef-PublicDomain"
     source: "gii"
     gii_slug: "bgb"
     feedback: true
