@@ -29,11 +29,10 @@ runs:
 
         # Run the CLI against the law repo (current working directory)
         cd "$GITHUB_WORKSPACE"
-        OUTPUT=$(node "$SYNC_DIR/dist/cli.js" 2>&1)
-        echo "$OUTPUT"
+        node "$SYNC_DIR/dist/cli.js" | tee /tmp/sync-output.txt
 
-        # Extract slugs of laws that had actual file changes (for per-law tagging)
-        CHANGED=$(echo "$OUTPUT" | grep -B20 "provisions, [1-9]" | grep "Syncing " | sed 's/.*Syncing \([^ ]*\).*/\1/' | tr '\n' ' ')
+        # Extract changed law slugs from output (for per-law tagging)
+        CHANGED=$(grep -B20 "provisions, [1-9]" /tmp/sync-output.txt | grep "Syncing " | sed 's/.*Syncing \([^ ]*\).*/\1/' | tr '\n' ' ' || true)
         echo "changed_laws=$CHANGED" >> "$GITHUB_OUTPUT"
 
     # Commit changes and create per-law tags (law/{slug}/{date}).
