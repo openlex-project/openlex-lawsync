@@ -37,8 +37,8 @@ export interface SupplementConfig {
 
 export interface LawConfig {
   slug: string;
-  title: string | Record<string, string>;
-  title_short?: string | Record<string, string>;
+  title: Record<string, string>;
+  title_short?: Record<string, string>;
   unit_type: "article" | "section";
   lang: string;
   license?: string;
