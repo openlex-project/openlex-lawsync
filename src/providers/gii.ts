@@ -12,7 +12,7 @@ const GII_URL = "https://www.gesetze-im-internet.de/{slug}/xml.zip";
 async function fetchXml(slug: string): Promise<string> {
   const url = GII_URL.replace("{slug}", slug);
   log.info(`  Fetching ${url}`);
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" }, signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error(`GII fetch failed: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   // ZIP: find first file, decompress (ZIP is simple enough for single-file archives)
