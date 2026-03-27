@@ -43,6 +43,7 @@ export interface LawConfig {
   category?: string;
   source: string;
   feedback?: boolean;
+  translations?: string[];
   // GII-specific
   gii_slug?: string;
   // EUR-Lex-specific
@@ -61,6 +62,8 @@ export interface SyncYaml {
  */
 export interface LawSyncProvider {
   id: string;
-  fetchLaw(config: LawConfig): Promise<SyncResult>;
+  /** Which languages this provider supports. Empty = only default lang. */
+  supportedLanguages?: string[];
+  fetchLaw(config: LawConfig, lang?: string): Promise<SyncResult>;
   fetchSupplement?(config: LawConfig, type: string, supplementCfg: SupplementConfig): Promise<SupplementResult>;
 }

@@ -39,10 +39,11 @@ function divToMarkdown(html: string): string {
 
 export const eurlexProvider: LawSyncProvider = {
   id: "eurlex",
+  supportedLanguages: ["bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "ga", "hr", "hu", "it", "lt", "lv", "mt", "nl", "pl", "pt", "ro", "sk", "sl", "sv"],
 
-  async fetchLaw(config: LawConfig): Promise<SyncResult> {
+  async fetchLaw(config: LawConfig, lang?: string): Promise<SyncResult> {
     if (!config.celex) throw new Error(`Missing celex for ${config.slug}`);
-    const html = await fetchHtml(config.celex, config.lang);
+    const html = await fetchHtml(config.celex, lang ?? config.lang);
     const provisions: Provision[] = [];
     const toc: TocNode[] = [];
     const stack: { level: number; node: TocNode }[] = [];

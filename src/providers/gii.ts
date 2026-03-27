@@ -79,6 +79,7 @@ function extractNr(enbez: string, unitType: string): string | null {
 
 export const giiProvider: LawSyncProvider = {
   id: "gii",
+  supportedLanguages: ["de"],
 
   async fetchLaw(config: LawConfig): Promise<SyncResult> {
     const slug = config.gii_slug ?? config.slug;

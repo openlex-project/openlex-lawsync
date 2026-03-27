@@ -105,6 +105,31 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
         writeFileSync(join(dir, "toc.yaml"), stringify(result.toc, { lineWidth: 0 }), "utf-8");
       }
 
+      // Sync translations
+      if (law.translations?.length) {
+        for (const lang of law.translations) {
+          if (provider.supportedLanguages && !provider.supportedLanguages.includes(lang)) {
+            log.warn("  Provider %s does not support language '%s' — skipping translation", provider.id, lang);
+            continue;
+          }
+          try {
+            log.info("  Syncing translation: %s", lang);
+            const translated = await withRetry(`${slug}/${lang}`, () => provider.fetchLaw(law, lang));
+            const langDir = join(dir, lang);
+            mkdirSync(langDir, { recursive: true });
+            for (const p of translated.provisions) {
+              const text = p.text.endsWith("\n") ? p.text : p.text + "\n";
+              if (writeIfChanged(join(langDir, `${p.nr}.md`), text, opts.dryRun)) { report.changed++; lawChanged++; }
+            }
+            log.info("  %s provisions translated to %s", translated.provisions.length, lang);
+          } catch (err) {
+            const msg = `${slug}/${lang}: ${err instanceof Error ? err.message : err}`;
+            log.error("Translation sync failed: %s", msg);
+            report.errors.push(msg);
+          }
+        }
+      }
+
       // Sync supplements (e.g., recitals)
       if (law.supplements && provider.fetchSupplement) {
         for (const [type, supplementCfg] of Object.entries(law.supplements)) {
