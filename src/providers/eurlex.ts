@@ -95,9 +95,9 @@ export const eurlexProvider: LawSyncProvider = {
     return { provisions, toc };
   },
 
-  async fetchSupplement(config: LawConfig, _type: string, _supplementCfg: SupplementConfig): Promise<SupplementResult> {
+  async fetchSupplement(config: LawConfig, _type: string, _supplementCfg: SupplementConfig, lang?: string): Promise<SupplementResult> {
     if (!config.celex) throw new Error(`Missing celex for ${config.slug}`);
-    const html = await fetchHtml(config.celex, config.lang);
+    const html = await fetchHtml(config.celex, lang ?? config.lang);
     const items: SupplementItem[] = [];
 
     // Parse recitals — they're numbered paragraphs in the preamble

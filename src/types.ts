@@ -67,5 +67,5 @@ export interface LawSyncProvider {
   /** Which languages this provider supports. Empty = only default lang. */
   supportedLanguages?: string[];
   fetchLaw(config: LawConfig, lang?: string): Promise<SyncResult>;
-  fetchSupplement?(config: LawConfig, type: string, supplementCfg: SupplementConfig): Promise<SupplementResult>;
+  fetchSupplement?(config: LawConfig, type: string, supplementCfg: SupplementConfig, lang?: string): Promise<SupplementResult>;
 }

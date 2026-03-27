@@ -139,6 +139,23 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
               if (writeIfChanged(join(dir, fname), text, opts.dryRun)) { report.changed++; lawChanged++; }
             }
 
+            // Translated supplements
+            if (law.translations?.length) {
+              for (const lang of law.translations) {
+                if (provider.supportedLanguages && !provider.supportedLanguages.includes(lang)) continue;
+                try {
+                  log.info("    Syncing %s supplement: %s", lang, type);
+                  const translated = await withRetry(`${slug}/${type}/${lang}`, () => provider.fetchSupplement!(law, type, supplementCfg, lang));
+                  const langDir = join(dir, lang);
+                  mkdirSync(langDir, { recursive: true });
+                  for (const item of translated.items) {
+                    const text = item.text.endsWith("\n") ? item.text : item.text + "\n";
+                    if (writeIfChanged(join(langDir, `${supplementCfg.prefix}-${item.nr}.md`), text, opts.dryRun)) { report.changed++; lawChanged++; }
+                  }
+                } catch (err) { log.warn("    Translation %s/%s/%s failed: %s", slug, type, lang, err instanceof Error ? err.message : err); }
+              }
+            }
+
             // Add supplement section to TOC
             if (suppResult.items.length > 0) {
               result.toc.push({
