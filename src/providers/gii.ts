@@ -12,10 +12,15 @@ const GII_URL = "https://www.gesetze-im-internet.de/{slug}/xml.zip";
 async function fetchXml(slug: string): Promise<string> {
   const url = GII_URL.replace("{slug}", slug);
   log.info(`  Fetching ${url}`);
-  const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" }, signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) throw new Error(`GII fetch failed: ${res.status}`);
-  const buf = new Uint8Array(await res.arrayBuffer());
-  return unzipXml(buf);
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" }, signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) throw new Error(`GII HTTP ${res.status}`);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return unzipXml(buf);
+  } catch (err: unknown) {
+    const e = err as Error;
+    throw new Error(`GII fetch ${url}: ${e.message}${e.cause ? ` (cause: ${e.cause})` : ""}`);
+  }
 }
 
 /** Extract text content of an XML tag (first match). */
