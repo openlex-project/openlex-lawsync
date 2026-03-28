@@ -6,7 +6,9 @@ import { unzipXml } from "../zip.js";
 import type { LawSyncProvider, LawConfig, SyncResult, TocNode, Provision } from "../types.js";
 import { log } from "../log.js";
 
-const GII_URL = "https://www.gesetze-im-internet.de/{slug}/xml.zip";
+const GII_URL = process.env.GII_PROXY_URL
+  ? `${process.env.GII_PROXY_URL}/{slug}`
+  : "https://www.gesetze-im-internet.de/{slug}/xml.zip";
 
 /** Fetch and decompress the XML zip archive from GII. */
 async function fetchXml(slug: string): Promise<string> {

@@ -8,6 +8,9 @@ inputs:
   deploy-hook:
     description: "Vercel Deploy Hook URL — triggers a redeploy after sync (optional)"
     required: false
+  gii-proxy-url:
+    description: "Proxy URL for gesetze-im-internet.de (bypasses IP blocking on GitHub Actions)"
+    required: false
 
 runs:
   using: "composite"
@@ -21,6 +24,8 @@ runs:
     - name: Build & run sync
       id: sync
       shell: bash
+      env:
+        GII_PROXY_URL: ${{ inputs.gii-proxy-url }}
       run: |
         # Clone lawsync tool into a temp directory
         SYNC_DIR=$(mktemp -d)
