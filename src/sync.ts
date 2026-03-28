@@ -8,8 +8,25 @@ import { join } from "node:path";
 import { stringify, parse } from "yaml";
 import type { SyncYaml, LawConfig } from "./types.js";
 import { getProvider } from "./providers/index.js";
-import { normalizeI18n, resolveI18n } from "./i18n-utils.js";
+import { normalizeI18n, resolveI18n, type I18nString } from "./i18n-utils.js";
 import { log } from "./log.js";
+import type { TocNode } from "./types.js";
+
+/** Merge translated TOC titles into the main TOC as i18n objects. */
+function mergeTocTranslation(main: TocNode[], translated: TocNode[], defaultLang: string, lang: string): void {
+  for (const node of main) {
+    const match = translated.find((t) => t.nr === node.nr && t.label === node.label);
+    if (match) {
+      // Convert title to i18n object if still a plain string
+      if (typeof node.title === "string") {
+        node.title = node.title ? { [defaultLang]: node.title } : {};
+      }
+      const translatedTitle = typeof match.title === "string" ? match.title : resolveI18n(match.title as I18nString, lang);
+      if (translatedTitle) (node.title as I18nString)[lang] = translatedTitle;
+      if (node.children && match.children) mergeTocTranslation(node.children, match.children, defaultLang, lang);
+    }
+  }
+}
 
 export interface SyncOptions {
   /** Working directory containing sync.yaml. Defaults to cwd. */
@@ -116,6 +133,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
           try {
             log.info("  Syncing translation: %s", lang);
             const translated = await withRetry(`${slug}/${lang}`, () => provider.fetchLaw(law, lang));
+            mergeTocTranslation(result.toc, translated.toc, law.lang, lang);
             const langDir = join(dir, lang);
             mkdirSync(langDir, { recursive: true });
             for (const p of translated.provisions) {
@@ -166,10 +184,10 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
             if (suppResult.items.length > 0) {
               result.toc.push({
                 label: supplementCfg.label[law.lang] ?? supplementCfg.label["en"] ?? type,
-                title: "",
+                title: supplementCfg.label,
                 children: suppResult.items.map((item) => ({
                   nr: `${supplementCfg.prefix}-${item.nr}`,
-                  title: item.title || `${supplementCfg.title_short[law.lang] ?? supplementCfg.title_short["en"] ?? ""} ${item.nr}`,
+                  title: item.title || `${resolveI18n(supplementCfg.title_short, law.lang)} ${item.nr}`,
                 })),
               });
             }
