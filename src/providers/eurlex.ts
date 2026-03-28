@@ -3,6 +3,7 @@
  * Uses Formex XML (fmx4) for structured parsing of articles and recitals.
  * No WAF issues — Cellar is a machine-readable API.
  */
+import { XMLParser } from "fast-xml-parser";
 import type { LawSyncProvider, LawConfig, SyncResult, SupplementConfig, SupplementResult, TocNode, Provision, SupplementItem } from "../types.js";
 import { log } from "../log.js";
 import { Buffer } from "node:buffer";
@@ -118,6 +119,71 @@ function fmxToMarkdown(xml: string): string {
     .trim();
 }
 
+/** Parse a Formex DIVISION into a TocNode with children (articles + nested divisions). */
+function parseDivision(div: Record<string, unknown>, provisions: Provision[]): TocNode {
+  const label = textOf((div.TITLE as Record<string, unknown>)?.TI ?? "");
+  const title = textOf((div.TITLE as Record<string, unknown>)?.STI ?? "");
+  const children: TocNode[] = [];
+
+  // Nested divisions (sections within chapters)
+  for (const sub of asArray<Record<string, unknown>>(div.DIVISION as Record<string, unknown>[] | Record<string, unknown> | undefined)) {
+    children.push(parseDivision(sub, provisions));
+  }
+
+  // Articles directly in this division
+  for (const art of asArray<Record<string, unknown>>(div.ARTICLE as Record<string, unknown>[] | Record<string, unknown> | undefined)) {
+    const id = art["@_IDENTIFIER"] as string | undefined;
+    if (!id) continue;
+    const nr = id.replace(/^0+/, "");
+    const prov = provisions.find((p) => p.nr === nr);
+    if (prov) children.push({ nr: prov.nr, title: prov.title });
+  }
+
+  return { label, title, children };
+}
+
+const xmlParser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", trimValues: true });
+
+/** Extract plain text from a Formex node that may contain nested HT (highlight) elements. */
+function textOf(node: unknown): string {
+  if (!node) return "";
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  const obj = node as Record<string, unknown>;
+  if (obj["#text"] != null) return String(obj["#text"]);
+  if (obj.HT) return textOf(obj.HT);
+  if (obj.P) return textOf(obj.P);
+  return "";
+}
+
+/** Ensure a value is an array. */
+function asArray<T>(v: T | T[] | undefined): T[] {
+  if (!v) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+/** Parse a Formex ARTICLE element into a Provision. */
+function parseArticle(article: Record<string, unknown>): Provision | null {
+  const id = article["@_IDENTIFIER"] as string | undefined;
+  if (!id) return null;
+  const nr = id.replace(/^0+/, "");
+  const title = textOf((article as Record<string, unknown>)["STI.ART"] ?? "");
+  // Re-serialize article body to string for fmxToMarkdown (which handles inline formatting)
+  const bodyXml = articleBodyToXml(article);
+  const text = fmxToMarkdown(bodyXml);
+  if (!text) return null;
+  return { nr, title, text };
+}
+
+/** Re-serialize article content (PARAGs) back to XML string for fmxToMarkdown. */
+function articleBodyToXml(article: Record<string, unknown>): string {
+  // fmxToMarkdown expects raw XML — we need the original XML substring
+  // Since fast-xml-parser doesn't preserve raw XML, we extract from the original string
+  // This is handled by passing the raw XML to fetchLaw and using regex for article body extraction
+  // For now, return empty — we'll use a hybrid approach
+  return "";
+}
+
 export const eurlexProvider: LawSyncProvider = {
   id: "eurlex",
   supportedLanguages: Object.keys(LANG_MAP),
@@ -127,32 +193,38 @@ export const eurlexProvider: LawSyncProvider = {
     const targetLang = lang ?? config.lang;
     const url = await findFormexUrl(config.celex, targetLang);
     if (!url) throw new Error(`No Formex manifestation found for ${config.celex} in ${targetLang}`);
-    const xml = await fetchFormex(url);
+    const rawXml = await fetchFormex(url);
 
+    // Use XML parser for structure (DIVISION hierarchy)
+    const doc = xmlParser.parse(rawXml);
+    const enactingTerms = doc.ACT?.["ENACTING.TERMS"];
+
+    // Use regex for article body extraction (fmxToMarkdown needs raw XML)
     const provisions: Provision[] = [];
-    const toc: TocNode[] = [];
-    const stack: { depth: number; node: TocNode }[] = [];
-
-    // Parse ARTICLE elements
     const articleRe = /<ARTICLE IDENTIFIER="(\d+\w*)">([\s\S]*?)<\/ARTICLE>/gi;
     let m: RegExpExecArray | null;
-    while ((m = articleRe.exec(xml))) {
-      const nr = m[1]!.replace(/^0+/, ""); // strip leading zeros (Formex uses 001, 002, ...)
+    while ((m = articleRe.exec(rawXml))) {
+      const nr = m[1]!.replace(/^0+/, "");
       const body = m[2]!;
       const tiMatch = body.match(/<STI\.ART>([^<]*)<\/STI\.ART>/);
       const title = tiMatch ? tiMatch[1]!.trim() : "";
       const text = fmxToMarkdown(body);
       if (!text) continue;
       provisions.push({ nr, title, text });
-      const provNode: TocNode = { nr, title };
-      if (stack.length) stack[stack.length - 1]!.node.children!.push(provNode);
-      else toc.push(provNode);
     }
 
-    // Parse DIVISION/TITLE for TOC structure (chapters, sections)
-    // Re-parse to build proper hierarchy
-    const divRe = /<DIVISION>([\s\S]*?)<\/DIVISION>/gi;
-    // For now, flat article list is sufficient — structure can be enhanced later
+    // Build TOC from parsed DIVISION structure
+    const toc: TocNode[] = [];
+    if (enactingTerms?.DIVISION) {
+      for (const div of asArray<Record<string, unknown>>(enactingTerms.DIVISION)) {
+        toc.push(parseDivision(div, provisions));
+      }
+    } else {
+      // No divisions — flat article list
+      for (const p of provisions) {
+        toc.push({ nr: p.nr, title: p.title });
+      }
+    }
 
     return { provisions, toc };
   },

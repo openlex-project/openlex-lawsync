@@ -12,6 +12,7 @@
     "start": "node dist/cli.js"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.5.9",
     "fflate": "^0.8.2",
     "yaml": "^2.7.0"
   },

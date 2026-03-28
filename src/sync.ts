@@ -12,19 +12,30 @@ import { normalizeI18n, resolveI18n, type I18nString } from "./i18n-utils.js";
 import { log } from "./log.js";
 import type { TocNode } from "./types.js";
 
-/** Merge translated TOC titles into the main TOC as i18n objects. */
+/** Merge translated TOC titles into the main TOC as i18n objects. Matches by position in tree. */
 function mergeTocTranslation(main: TocNode[], translated: TocNode[], defaultLang: string, lang: string): void {
-  for (const node of main) {
-    const match = translated.find((t) => t.nr === node.nr && t.label === node.label);
-    if (match) {
-      // Convert title to i18n object if still a plain string
-      if (typeof node.title === "string") {
-        node.title = node.title ? { [defaultLang]: node.title } : {};
-      }
-      const translatedTitle = typeof match.title === "string" ? match.title : resolveI18n(match.title as I18nString, lang);
-      if (translatedTitle) (node.title as I18nString)[lang] = translatedTitle;
-      if (node.children && match.children) mergeTocTranslation(node.children, match.children, defaultLang, lang);
+  for (let i = 0; i < main.length; i++) {
+    const node = main[i]!;
+    const match = translated[i];
+    if (!match) continue;
+
+    // Convert title to i18n object if still a plain string
+    if (typeof node.title === "string" && node.title) {
+      node.title = { [defaultLang]: node.title };
     }
+    const translatedTitle = typeof match.title === "string" ? match.title : "";
+    if (translatedTitle && typeof node.title === "object") (node.title as I18nString)[lang] = translatedTitle;
+
+    // Convert label too (e.g., "KAPITEL I" → { de: "KAPITEL I", en: "CHAPTER I" })
+    if (node.label && match.label && node.label !== match.label) {
+      if (typeof node.label === "string") {
+        node.label = { [defaultLang]: node.label } as unknown as string;
+      }
+      const matchLabel = typeof match.label === "string" ? match.label : "";
+      if (matchLabel) (node.label as unknown as I18nString)[lang] = matchLabel;
+    }
+
+    if (node.children && match.children) mergeTocTranslation(node.children, match.children, defaultLang, lang);
   }
 }
 
@@ -182,7 +193,7 @@ export async function sync(opts: SyncOptions = {}): Promise<SyncReport> {
 
             // Add supplement section to TOC
             if (suppResult.items.length > 0) {
-              result.toc.push({
+              result.toc.unshift({
                 label: supplementCfg.label[law.lang] ?? supplementCfg.label["en"] ?? type,
                 title: supplementCfg.label,
                 children: suppResult.items.map((item) => ({

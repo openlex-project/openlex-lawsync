@@ -2,7 +2,7 @@ import type { I18nString } from "./i18n-utils.js";
 
 /** Table of contents node — either a structure heading or a provision reference. */
 export interface TocNode {
-  label?: string;
+  label?: string | I18nString;
   title: string | I18nString;
   nr?: string;
   children?: TocNode[];
