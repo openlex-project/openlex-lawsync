@@ -28,11 +28,15 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: openlex-project/openlex-lawsync@v1
+      - uses: actions/checkout@v6
+      - uses: openlex-project/openlex-lawsync@main
         with:
           deploy-hook: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+          gii-proxy-url: "https://gii-proxy.lexict.workers.dev"
+          gii-proxy-token: ${{ secrets.GII_PROXY_TOKEN }}
 ```
+
+> **Note:** gesetze-im-internet.de blocks GitHub Actions IPs. The `gii-proxy-url` and `gii-proxy-token` inputs route GII requests through a Cloudflare Worker proxy. See [GII Proxy](#gii-proxy) below.
 
 ### CLI
 
@@ -96,6 +100,22 @@ export const myProvider: LawSyncProvider = {
 ```
 
 Register in `src/providers/index.ts` and use `source: "my-source"` in sync.yaml.
+
+## GII Proxy
+
+gesetze-im-internet.de drops TCP connections from GitHub Actions IP ranges. The `proxy/` directory contains a Cloudflare Worker that proxies GII requests, secured with a Bearer token.
+
+**Deploy:**
+
+```bash
+cd proxy
+wrangler deploy
+echo "your-secret-token" | wrangler secret put PROXY_TOKEN
+```
+
+Then set `GII_PROXY_TOKEN` as a GitHub Actions secret on your law repository.
+
+Without the proxy, GII laws (BGB, StGB, etc.) will fail on GitHub Actions but still work when running the CLI locally.
 
 ## License
 
