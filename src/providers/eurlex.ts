@@ -49,7 +49,7 @@ async function sparql(query: string): Promise<Record<string, string>[]> {
   return data.results.bindings.map((b) => Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v.value])));
 }
 
-import { unzipXml } from "../zip.js";
+import { unzipXml, unzipAllXml } from "../zip.js";
 
 /** Fetch the Formex XML document. Handles both direct XML (DOC_2) and ZIP archives (DOC_1). */
 async function fetchFormex(manifestationUrl: string): Promise<string> {
@@ -75,6 +75,20 @@ async function fetchFormex(manifestationUrl: string): Promise<string> {
     }
   }
   throw new Error(`Cellar fetch failed for ${manifestationUrl}`);
+}
+
+/** Fetch the raw ZIP buffer from a manifestation URL (for multi-file extraction). Returns null if not a ZIP. */
+async function fetchFormexZip(manifestationUrl: string): Promise<Uint8Array | null> {
+  for (const doc of ["/DOC_2", "/DOC_1"]) {
+    const url = `${manifestationUrl}${doc}`;
+    const xmlRes = await fetch(url, { headers: { "Accept": "application/xml;type=fmx4" } });
+    if (xmlRes.ok) return null; // direct XML, no ZIP
+    if (xmlRes.status === 406) {
+      const zipRes = await fetch(url, { headers: { "Accept": "application/zip" } });
+      if (zipRes.ok) return new Uint8Array(await zipRes.arrayBuffer());
+    }
+  }
+  return null;
 }
 
 /** Extract text content from a Formex XML element, converting to Markdown. */
@@ -143,16 +157,17 @@ export const eurlexProvider: LawSyncProvider = {
     return { provisions, toc };
   },
 
-  async fetchSupplement(config: LawConfig, _type: string, _supplementCfg: SupplementConfig, lang?: string): Promise<SupplementResult> {
+  async fetchSupplement(config: LawConfig, type: string, _supplementCfg: SupplementConfig, lang?: string): Promise<SupplementResult> {
     if (!config.celex) throw new Error(`Missing celex for ${config.slug}`);
     const targetLang = lang ?? config.lang;
     const url = await findFormexUrl(config.celex, targetLang);
     if (!url) throw new Error(`No Formex manifestation found for ${config.celex} in ${targetLang}`);
+
+    if (type === "annexes") return fetchAnnexes(url);
+
+    // Default: recitals from ACT XML
     const xml = await fetchFormex(url);
-
     const items: SupplementItem[] = [];
-
-    // Parse CONSID elements (recitals in the preamble)
     const considRe = /<CONSID>([\s\S]*?)<\/CONSID>/gi;
     let m: RegExpExecArray | null;
     while ((m = considRe.exec(xml))) {
@@ -163,7 +178,33 @@ export const eurlexProvider: LawSyncProvider = {
       const text = fmxToMarkdown(body);
       if (text) items.push({ nr, text });
     }
-
     return { items };
   },
 };
+
+/** Roman numeral → Arabic number */
+const ROMAN: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10, XI: 11, XII: 12, XIII: 13, XIV: 14, XV: 15 };
+
+/** Fetch annexes from a Formex ZIP (separate ANNEX XML files). */
+async function fetchAnnexes(manifestationUrl: string): Promise<SupplementResult> {
+  const zip = await fetchFormexZip(manifestationUrl);
+  if (!zip) return { items: [] }; // no ZIP = no separate annexes
+  const annexXmls = unzipAllXml(zip, (_name, data) => {
+    const head = new TextDecoder().decode(data.slice(0, 200));
+    return /<ANNEX[\s>]/.test(head);
+  });
+  const items: SupplementItem[] = [];
+  for (const xml of annexXmls) {
+    const tiMatch = xml.match(/<TITLE>[\s\S]*?<TI>[\s\S]*?<P>\s*(?:ANHANG|ANNEX|ANNEXE)\s+([IVXLC]+)\s*<\/P>/i);
+    if (!tiMatch) continue;
+    const nr = String(ROMAN[tiMatch[1]!] ?? tiMatch[1]!);
+    const stiMatch = xml.match(/<STI>[\s\S]*?<P>([\s\S]*?)<\/P>/);
+    const title = stiMatch ? fmxToMarkdown(stiMatch[1]!).trim() : "";
+    const contentsMatch = xml.match(/<CONTENTS>([\s\S]*)<\/CONTENTS>/);
+    const text = contentsMatch ? fmxToMarkdown(contentsMatch[1]!) : "";
+    if (text) items.push({ nr, title, text });
+  }
+  items.sort((a, b) => Number(a.nr) - Number(b.nr));
+  log.info("  %d annexes extracted", items.length);
+  return { items };
+}

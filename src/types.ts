@@ -22,6 +22,7 @@ export interface SyncResult {
 
 export interface SupplementItem {
   nr: string;
+  title?: string;
   text: string;
 }
 

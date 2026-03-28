@@ -12,3 +12,11 @@ export function unzipXml(buf: Uint8Array, match?: (name: string, data: Uint8Arra
   }
   throw new Error(`ZIP contains ${xmlEntries.length} XML files but no match found`);
 }
+
+/** Unzip and return all XMLs matching a predicate. */
+export function unzipAllXml(buf: Uint8Array, match: (name: string, data: Uint8Array) => boolean): string[] {
+  const files = unzipSync(buf);
+  return Object.entries(files)
+    .filter(([n, d]) => n.endsWith(".xml") && match(n, d))
+    .map(([, d]) => new TextDecoder().decode(d));
+}
