@@ -6,8 +6,10 @@ import { unzipXml } from "../zip.js";
 import type { LawSyncProvider, LawConfig, SyncResult, TocNode, Provision } from "../types.js";
 import { log } from "../log.js";
 
-const GII_URL = process.env.GII_PROXY_URL
-  ? `${process.env.GII_PROXY_URL}/{slug}`
+const GII_PROXY_URL = process.env.GII_PROXY_URL;
+const GII_PROXY_TOKEN = process.env.GII_PROXY_TOKEN;
+const GII_URL = GII_PROXY_URL
+  ? `${GII_PROXY_URL}/{slug}`
   : "https://www.gesetze-im-internet.de/{slug}/xml.zip";
 
 /** Fetch and decompress the XML zip archive from GII. */
@@ -15,7 +17,9 @@ async function fetchXml(slug: string): Promise<string> {
   const url = GII_URL.replace("{slug}", slug);
   log.info(`  Fetching ${url}`);
   try {
-    const res = await fetch(url, { headers: { "User-Agent": "openlex-lawsync/1.0" }, signal: AbortSignal.timeout(30_000) });
+    const headers: Record<string, string> = { "User-Agent": "openlex-lawsync/1.0" };
+    if (GII_PROXY_URL && GII_PROXY_TOKEN) headers["Authorization"] = `Bearer ${GII_PROXY_TOKEN}`;
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
     if (!res.ok) throw new Error(`GII HTTP ${res.status}`);
     const buf = new Uint8Array(await res.arrayBuffer());
     return unzipXml(buf);

@@ -11,6 +11,9 @@ inputs:
   gii-proxy-url:
     description: "Proxy URL for gesetze-im-internet.de (bypasses IP blocking on GitHub Actions)"
     required: false
+  gii-proxy-token:
+    description: "Bearer token for the GII proxy"
+    required: false
 
 runs:
   using: "composite"
@@ -26,6 +29,7 @@ runs:
       shell: bash
       env:
         GII_PROXY_URL: ${{ inputs.gii-proxy-url }}
+        GII_PROXY_TOKEN: ${{ inputs.gii-proxy-token }}
       run: |
         # Clone lawsync tool into a temp directory
         SYNC_DIR=$(mktemp -d)
